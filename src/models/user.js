@@ -18,7 +18,7 @@ const UserSchema = new mongoose.Schema({
     url: { type: String },
   },
   password: { required: true, type: String },
-  token: { type: String },
+  token_detail: { access_token: { type: String }, jti: { type: String } },
 });
 const userModel = mongoose.model("User", UserSchema);
 

@@ -40,10 +40,10 @@ export const Register = asyncHandler(async (req, res) => {
     phone: pn.number.e164,
   });
 
-  const { access_token, refresh_token } = generateAuthToken(user);
+  const { access_token, refresh_token, jti } = generateAuthToken(user);
   const token = await userModel.updateOne(
     { _id: user._id },
-    { token: access_token }
+    { token_detail: { access_token, jti } }
   );
 
   if (!token) {
@@ -59,11 +59,11 @@ export const Login = asyncHandler(async (req, res) => {
   const user = await userModel.findOne({ email });
 
   if (user && (await bcrypt.compare(password, user.password))) {
-    const { access_token, refresh_token } = generateAuthToken(user);
+    const { access_token, refresh_token, jti } = generateAuthToken(user);
 
     const token = await userModel.findByIdAndUpdate(
       { _id: user._id },
-      { token: access_token }
+      { token_detail: { access_token, jti } }
     );
 
     return res.status(200).json({ access_token, refresh_token });
@@ -72,25 +72,25 @@ export const Login = asyncHandler(async (req, res) => {
 });
 
 export const Logout = asyncHandler(async (req, res) => {
-  console.log('here')
   const { id } = req.user;
-  console.log(req.user);
-  await userModel.findByIdAndUpdate({ _id: id }, { token: null });
+  await userModel.findByIdAndUpdate(
+    { _id: id },
+    { token_detail: { access_token: null, jti: null } }
+  );
   res.status(200).send({ message: "You have been logged out" });
 });
 
-export const me = asyncHandler(async (req, res,next) => {
-  console.log(req.user)
+export const me = asyncHandler(async (req, res, next) => {
   if (req.method === "GET") {
     const user = await userModel
       .findById({ _id: req.user.id })
-      .select({ password: 0 });
+      .select({ password: 0, token_detail: 0 });
     if (!user) {
       throw new CustomErrorApi("No User with this Email", 404);
     }
     return res.status(200).json({ user });
   }
-  const { password, phone, avatar, newPassword } = req.body;
+  const { password, phone, newPassword } = req.body;
   const update = Object.keys(req.body);
   const update_ele = ["password", "avatar", "phone", "newPassword"];
   const isValid = update.every((item) => update_ele.includes(item));
@@ -115,11 +115,17 @@ export const me = asyncHandler(async (req, res,next) => {
       { password: hashPassword }
     );
   }
-  // if (req.body.avatar) {
-  //   await cloudinary.uploader.destroy(user.image.public_id);
-  //   await userModel.findByIdAndUpdate({ _id: req.user.id }, { avatar: null });
-  // }
-  return res
-    .status(200)
-    .json({ message: "Updated successfully" });
+
+  if (req.file) {
+    await cloudinary.uploader.destroy(user.avatar.public_id);
+    await userModel.findByIdAndUpdate(
+      { _id: req.user.id },
+      { avatar: { public_id: null, url: null } }
+    );
+  }
+  if (phone) {
+    const pn = parsePhoneNumber(phone, { regionCode: "PK" });
+    await userModel.findByIdAndUpdate({ _id: req.user.id }, { phone: pn });
+  }
+  return res.status(200).json({ message: "Updated successfully" });
 });

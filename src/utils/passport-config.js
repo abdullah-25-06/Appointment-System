@@ -14,7 +14,11 @@ const strategy = new JwtStrategy(option, (payload, done) => {
     .select("-password -avatar")
     .then((user) => {
       if (user) {
-        return done(null, user);
+        if (user.token_detail.jti == payload.jti) {
+          return done(null, user);
+        } else {
+          return done(null, false);
+        }
       } else {
         return done(null, false);
       }
